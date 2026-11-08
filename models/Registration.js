@@ -36,6 +36,7 @@ const registrationSchema = new mongoose.Schema(
         videoUrl: { type: String, default: '' },
         submissionVideoUrl: { type: String, default: '' },
         youtubeUrl: { type: String, default: '' },
+        youtubeId: { type: String, default: '' },
         videoStatus: { type: String, default: 'pending' },
         submissionDate: { type: Date },
       },

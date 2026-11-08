@@ -8,6 +8,9 @@ const Category = require('../models/Category');
 const Registration = require('../models/Registration');
 const Notification = require('../models/Notification');
 const portalController = require('../controllers/portalController');
+const videoController = require('../controllers/videoController');
+const videoUpload = require('../middlewares/videoUploadMiddleware');
+const { extractYouTubeId } = require('../utils/youtubeService');
 
 // Middlewares
 const { protect } = require('../middlewares/authMiddleware');
@@ -350,6 +353,10 @@ const saveAthleteVideoHandler = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Registration nahi mili' });
     }
 
+    const extractedYtId = extractYouTubeId(videoUrl);
+    const finalVideoUrl = extractedYtId ? `https://www.youtube.com/watch?v=${extractedYtId}` : videoUrl.trim();
+    const finalYoutubeId = extractedYtId || '';
+
     let updated = false;
 
     if (Array.isArray(reg.athletes) && reg.athletes.length > 0) {
@@ -357,8 +364,10 @@ const saveAthleteVideoHandler = async (req, res) => {
       if (athleteId) {
         reg.athletes.forEach((ath) => {
           if (ath._id && String(ath._id) === String(athleteId)) {
-            ath.videoUrl = videoUrl;
-            ath.submissionVideoUrl = videoUrl;
+            ath.videoUrl = finalVideoUrl;
+            ath.submissionVideoUrl = finalVideoUrl;
+            ath.youtubeUrl = finalVideoUrl;
+            ath.youtubeId = finalYoutubeId;
             ath.videoStatus = 'submitted';
             ath.submissionDate = new Date();
             updated = true;
@@ -369,8 +378,10 @@ const saveAthleteVideoHandler = async (req, res) => {
       // 2. Index se match karein
       if (!updated && athleteIndex !== undefined && reg.athletes[Number(athleteIndex)]) {
         const targetAth = reg.athletes[Number(athleteIndex)];
-        targetAth.videoUrl = videoUrl;
-        targetAth.submissionVideoUrl = videoUrl;
+        targetAth.videoUrl = finalVideoUrl;
+        targetAth.submissionVideoUrl = finalVideoUrl;
+        targetAth.youtubeUrl = finalVideoUrl;
+        targetAth.youtubeId = finalYoutubeId;
         targetAth.videoStatus = 'submitted';
         targetAth.submissionDate = new Date();
         updated = true;
@@ -382,8 +393,10 @@ const saveAthleteVideoHandler = async (req, res) => {
           (a) => a.name && a.name.trim().toLowerCase() === String(athleteName).trim().toLowerCase()
         );
         if (targetAth) {
-          targetAth.videoUrl = videoUrl;
-          targetAth.submissionVideoUrl = videoUrl;
+          targetAth.videoUrl = finalVideoUrl;
+          targetAth.submissionVideoUrl = finalVideoUrl;
+          targetAth.youtubeUrl = finalVideoUrl;
+          targetAth.youtubeId = finalYoutubeId;
           targetAth.videoStatus = 'submitted';
           targetAth.submissionDate = new Date();
           updated = true;
@@ -399,6 +412,8 @@ const saveAthleteVideoHandler = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'Video sirf mutalqa athlete ke liye save ho gayi!',
+      videoUrl: finalVideoUrl,
+      youtubeId: finalYoutubeId,
       data: reg,
     });
   } catch (err) {
@@ -590,6 +605,12 @@ router.get('/profile', protect, async (req, res) => {
 // Aliased route handlers
 router.put('/registrations/:regId/video', saveAthleteVideoHandler);
 router.put('/portal/registrations/:regId/video', saveAthleteVideoHandler);
+
+// Video Upload via YouTube Data API v3 (Unlisted mode)
+router.post('/registrations/:regId/video-upload', protect, videoUpload.single('video'), videoController.uploadAthleteVideo);
+router.post('/registrations/:regId/athlete-video', protect, videoUpload.single('video'), videoController.uploadAthleteVideo);
+router.post('/portal/registrations/:regId/video-upload', protect, videoUpload.single('video'), videoController.uploadAthleteVideo);
+router.post('/portal/registrations/:regId/athlete-video', protect, videoUpload.single('video'), videoController.uploadAthleteVideo);
 
 router.get('/notifications', protect, portalController.getPortalNotifications);
 router.patch('/notifications/read-all', protect, portalController.markPortalNotificationsRead);
