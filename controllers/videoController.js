@@ -7,6 +7,10 @@ const { uploadVideoToYouTube, extractYouTubeId } = require('../utils/youtubeServ
  * and permanently binds videoUrl + youtubeId to the specific athlete in MongoDB.
  */
 exports.uploadAthleteVideo = async (req, res) => {
+  // Allow up to 10 minutes for large video uploads & YouTube streaming
+  if (req.setTimeout) req.setTimeout(600000);
+  if (res.setTimeout) res.setTimeout(600000);
+
   const tempFilePath = req.file?.path;
 
   try {
@@ -151,6 +155,9 @@ exports.uploadAthleteVideo = async (req, res) => {
  * Standalone direct video upload to YouTube unlisted mode
  */
 exports.directYouTubeUpload = async (req, res) => {
+  if (req.setTimeout) req.setTimeout(600000);
+  if (res.setTimeout) res.setTimeout(600000);
+
   const tempFilePath = req.file?.path;
   try {
     if (!tempFilePath) {

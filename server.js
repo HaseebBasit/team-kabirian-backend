@@ -62,6 +62,11 @@ app.post('/api/v1/results', protect, adminController.assignResult);
 app.put('/api/v1/results/:id/toggle-publish', protect, adminController.toggleResultPublish);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
+
+// Configure 10-minute timeouts for long video uploads and YouTube streaming
+server.timeout = 600000;
+server.keepAliveTimeout = 610000;
+server.headersTimeout = 620000;
