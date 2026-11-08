@@ -110,6 +110,16 @@ router.get('/events', protect, async (req, res) => {
         matched = allCategories.filter((c) => idStrings.includes(c._id.toString()));
       }
 
+      const enrichedCategories = matched.map((c) => ({
+        ...c,
+        fee: c.fee !== undefined ? c.fee : (c.baseFee !== undefined ? c.baseFee : 1000),
+        price: c.price !== undefined ? c.price : (c.baseFee !== undefined ? c.baseFee : 1000),
+        entryFee: c.entryFee !== undefined ? c.entryFee : (c.baseFee !== undefined ? c.baseFee : 1000),
+        baseFee: c.baseFee !== undefined ? c.baseFee : (c.fee !== undefined ? c.fee : 1000),
+        subCategories: c.subcategories || c.subCategories || [],
+        subcategories: c.subcategories || c.subCategories || [],
+      }));
+
       const bName = ev.bankName || ev.bankDetails?.bankName || '';
       const aTitle = ev.accountTitle || ev.bankDetails?.accountTitle || '';
       const aNum = ev.accountNumber || ev.bankDetails?.accountNumber || '';
@@ -128,7 +138,7 @@ router.get('/events', protect, async (req, res) => {
           iban: ib,
           qrCodeUrl: ev.bankDetails?.qrCodeUrl || '',
         },
-        categories: matched,
+        categories: enrichedCategories,
       };
     });
 

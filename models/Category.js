@@ -5,6 +5,9 @@ const categorySchema = new mongoose.Schema(
     eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true },
     name: { type: String, required: true, trim: true },
     baseFee: { type: Number, required: true, default: 1000 },
+    fee: { type: Number },
+    price: { type: Number },
+    entryFee: { type: Number },
     lateFee: { type: Number, default: 500 },
     baseFeeUSD: { type: Number, default: 20 },
     lateFeeUSD: { type: Number, default: 5 },
@@ -14,5 +17,14 @@ const categorySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+categorySchema.pre('save', function (next) {
+  if (this.baseFee !== undefined) {
+    if (this.fee === undefined) this.fee = this.baseFee;
+    if (this.price === undefined) this.price = this.baseFee;
+    if (this.entryFee === undefined) this.entryFee = this.baseFee;
+  }
+  next();
+});
 
 module.exports = mongoose.model('Category', categorySchema);
