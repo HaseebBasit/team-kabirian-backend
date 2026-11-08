@@ -16,24 +16,31 @@ exports.getPublicEvents = async (_req, res) => {
     const ids = events.map((event) => event._id);
     const categoryRows = ids.length
       ? await Category.find({ eventId: { $in: ids } })
-          .select('_id eventId event')
+          .select('_id eventId event name')
           .lean()
       : [];
-    const categoryIdsByEvent = new Map();
-    const addCategory = (eventId, categoryId) => {
-      if (!eventId || !categoryId) return;
+    const categoriesByEvent = new Map();
+    const addCategory = (eventId, cat) => {
+      if (!eventId || !cat) return;
       const key = String(eventId);
-      if (!categoryIdsByEvent.has(key)) categoryIdsByEvent.set(key, new Set());
-      categoryIdsByEvent.get(key).add(String(categoryId));
+      if (!categoriesByEvent.has(key)) categoriesByEvent.set(key, []);
+      const list = categoriesByEvent.get(key);
+      const catId = String(cat._id || cat);
+      if (!list.some((c) => String(c._id || c) === catId)) {
+        list.push({
+          _id: cat._id || catId,
+          name: cat.name || 'Category',
+        });
+      }
     };
 
     for (const category of categoryRows) {
-      addCategory(category.eventId, category._id);
-      addCategory(category.event, category._id);
+      addCategory(category.eventId, category);
+      addCategory(category.event, category);
     }
     for (const event of events) {
       for (const category of event.categories || []) {
-        addCategory(event._id, category?._id || category);
+        addCategory(event._id, category);
       }
     }
 
@@ -41,6 +48,7 @@ exports.getPublicEvents = async (_req, res) => {
       // The Admin Portal's explicit status is authoritative. A past event date
       // must not silently turn an administrator's live/open event into closed.
       const eventEnded = event.status === 'ended';
+      const eventCats = categoriesByEvent.get(String(event._id)) || [];
 
       return {
         _id: event._id,
@@ -56,7 +64,8 @@ exports.getPublicEvents = async (_req, res) => {
         lateFeeStartDate: event.lateFeeStartDate,
         registrationDeadline: event.registrationDeadline,
         status: event.status,
-        categoriesCount: categoryIdsByEvent.get(String(event._id))?.size || 0,
+        categoriesCount: eventCats.length,
+        categories: eventCats,
         eventEnded,
         registrationOpen: event.status === 'live' && !eventEnded,
       };
