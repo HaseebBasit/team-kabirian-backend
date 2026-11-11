@@ -15,6 +15,105 @@ const { extractYouTubeId } = require('../utils/youtubeService');
 // Middlewares
 const { protect } = require('../middlewares/authMiddleware');
 
+// Helper to enrich athletes in registrations with human-readable category details
+const enrichRegistrationsWithCategories = async (registrations) => {
+  if (!Array.isArray(registrations) || registrations.length === 0) return registrations;
+
+  try {
+    const allCategories = await Category.find().select('_id name title eventId subcategories subCategories fee').lean();
+    const categoryMap = {};
+    allCategories.forEach((cat) => {
+      const idStr = cat._id ? cat._id.toString() : '';
+      if (idStr) {
+        categoryMap[idStr] = cat.name || cat.title || '';
+      }
+    });
+
+    const isHexId = (str) => typeof str === 'string' && /^[0-9a-fA-F]{24}$/.test(str.trim());
+
+    return registrations.map((reg) => {
+      if (!Array.isArray(reg.athletes)) return reg;
+      const enrichedAthletes = reg.athletes.map((ath) => {
+        let catName = ath.categoryName || '';
+
+        const rawCats = Array.isArray(ath.selectedCategories) && ath.selectedCategories.length > 0
+          ? ath.selectedCategories
+          : Array.isArray(ath.categories) && ath.categories.length > 0
+          ? ath.categories
+          : [];
+
+        if (!catName || isHexId(catName)) {
+          if (catName && isHexId(catName) && categoryMap[catName.trim()]) {
+            catName = categoryMap[catName.trim()];
+          } else {
+            for (const item of rawCats) {
+              const id = typeof item === 'object' && item !== null
+                ? (item.categoryId || item._id || item.id || '').toString()
+                : (item || '').toString();
+              if (id && categoryMap[id]) {
+                catName = categoryMap[id];
+                break;
+              }
+              if (typeof item === 'object' && item !== null && (item.name || item.categoryName)) {
+                const nameCandidate = item.name || item.categoryName;
+                if (!isHexId(nameCandidate)) {
+                  catName = nameCandidate;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        const normalizedCategories = rawCats.map((item) => {
+          if (typeof item === 'object' && item !== null) {
+            const id = (item.categoryId || item._id || item.id || '').toString();
+            const resolvedName = (item.name && !isHexId(item.name))
+              ? item.name
+              : (item.categoryName && !isHexId(item.categoryName))
+              ? item.categoryName
+              : (categoryMap[id] || id);
+            return {
+              ...item,
+              categoryId: id,
+              name: resolvedName,
+              categoryName: resolvedName,
+            };
+          }
+          const idStr = String(item || '').trim();
+          const resolvedName = categoryMap[idStr] || idStr;
+          return {
+            categoryId: idStr,
+            name: resolvedName,
+            categoryName: resolvedName,
+          };
+        });
+
+        const fallbackCatName = normalizedCategories[0]?.name && !isHexId(normalizedCategories[0]?.name)
+          ? normalizedCategories[0]?.name
+          : ath.belt && ath.belt.trim().toUpperCase() !== 'WHITE'
+          ? ath.belt
+          : 'General Category';
+
+        return {
+          ...ath,
+          categoryName: (catName && !isHexId(catName)) ? catName : fallbackCatName,
+          selectedCategories: normalizedCategories,
+          categories: normalizedCategories,
+        };
+      });
+
+      return {
+        ...reg,
+        athletes: enrichedAthletes,
+      };
+    });
+  } catch (enrichErr) {
+    console.error('Error enriching registrations with categories:', enrichErr);
+    return registrations;
+  }
+};
+
 // ==========================================
 // 1. GET PORTAL DASHBOARD DATA
 // @route GET /api/v1/portal/dashboard
@@ -41,14 +140,16 @@ router.get('/dashboard', protect, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    const totalRegistrations = myRegistrations.length;
-    const pendingPayments = myRegistrations.filter(
+    const enrichedMyRegistrations = await enrichRegistrationsWithCategories(myRegistrations);
+
+    const totalRegistrations = enrichedMyRegistrations.length;
+    const pendingPayments = enrichedMyRegistrations.filter(
       (r) =>
         r.registrationStatus === 'under_review' ||
         r.registrationStatus === 'pending_payment' ||
         r.paymentOption === 'half'
     ).length;
-    const approved = myRegistrations.filter(
+    const approved = enrichedMyRegistrations.filter(
       (r) => r.registrationStatus === 'approved'
     ).length;
     const upcomingEventsCount = events.length;
@@ -68,7 +169,7 @@ router.get('/dashboard', protect, async (req, res) => {
           upcomingEventsCount,
         },
         events,
-        myRegistrations,
+        myRegistrations: enrichedMyRegistrations,
       },
     });
   } catch (error) {
@@ -176,10 +277,12 @@ router.get('/registrations', protect, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    const enrichedRegistrations = await enrichRegistrationsWithCategories(registrations);
+
     return res.status(200).json({
       success: true,
-      count: registrations.length,
-      data: registrations,
+      count: enrichedRegistrations.length,
+      data: enrichedRegistrations,
     });
   } catch (error) {
     console.error('Portal Get Registrations Error:', error);
@@ -230,6 +333,17 @@ router.post('/registrations', protect, async (req, res) => {
       });
     }
 
+    const allCategories = await Category.find().select('_id name title').lean();
+    const catMap = {};
+    allCategories.forEach((c) => {
+      const idStr = c._id ? c._id.toString() : '';
+      if (idStr) {
+        catMap[idStr] = c.name || c.title || '';
+      }
+    });
+
+    const isHexId = (str) => typeof str === 'string' && /^[0-9a-fA-F]{24}$/.test(str.trim());
+
     const sanitizedAthletes = parsedAthletes.map((ath, idx) => {
       const rawCategories = ath.selectedCategories || ath.categories || [];
 
@@ -243,6 +357,21 @@ router.post('/registrations', protect, async (req, res) => {
         .filter((id) => id && mongoose.Types.ObjectId.isValid(String(id)))
         .map((id) => new mongoose.Types.ObjectId(String(id)));
 
+      let catName = ath.categoryName || '';
+      if (!catName || isHexId(catName)) {
+        if (catName && isHexId(catName) && catMap[catName.trim()]) {
+          catName = catMap[catName.trim()];
+        } else if (rawCategories[0]) {
+          const firstRaw = rawCategories[0];
+          if (typeof firstRaw === 'object' && firstRaw !== null) {
+            catName = firstRaw.categoryName || firstRaw.name || '';
+          }
+          if ((!catName || isHexId(catName)) && categoryObjectIds[0]) {
+            catName = catMap[categoryObjectIds[0].toString()] || '';
+          }
+        }
+      }
+
       const subDivisionName =
         rawCategories[0]?.subCategory || rawCategories[0]?.division || ath.belt || 'Standard Open';
 
@@ -251,6 +380,7 @@ router.post('/registrations', protect, async (req, res) => {
         age: Number(ath.age) || 18,
         gender: ath.gender || 'Male',
         cnic: String(ath.cnic || 'N/A').trim(),
+        categoryName: catName || 'General Category',
         selectedCategories: categoryObjectIds,
         categories: categoryObjectIds,
         subCategory: subDivisionName,
