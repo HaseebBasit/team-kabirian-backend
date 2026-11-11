@@ -73,11 +73,14 @@ const enrichRegistrationsWithCategories = async (registrations) => {
               : (item.categoryName && !isHexId(item.categoryName))
               ? item.categoryName
               : (categoryMap[id] || id);
+            const resolvedSub = item.subCategory || item.selectedSubcategory || item.division || item.subDivision || ath.subCategory || 'Standard Open';
             return {
               ...item,
               categoryId: id,
               name: resolvedName,
               categoryName: resolvedName,
+              subCategory: resolvedSub,
+              division: resolvedSub,
             };
           }
           const idStr = String(item || '').trim();
@@ -86,6 +89,8 @@ const enrichRegistrationsWithCategories = async (registrations) => {
             categoryId: idStr,
             name: resolvedName,
             categoryName: resolvedName,
+            subCategory: ath.subCategory || ath.belt || 'Standard Open',
+            division: ath.subCategory || ath.belt || 'Standard Open',
           };
         });
 
@@ -375,14 +380,52 @@ router.post('/registrations', protect, async (req, res) => {
       const subDivisionName =
         rawCategories[0]?.subCategory || rawCategories[0]?.division || ath.belt || 'Standard Open';
 
+      const detailedCategories = rawCategories.map((c) => {
+        if (typeof c === 'object' && c !== null) {
+          const cIdStr = (c.categoryId || c._id || c.id || '').toString();
+          const cName = (c.categoryName && !isHexId(c.categoryName))
+            ? c.categoryName
+            : (c.name && !isHexId(c.name))
+            ? c.name
+            : (catMap[cIdStr] || 'Category');
+          const cSub = c.subCategory || c.selectedSubcategory || c.division || ath.subCategory || ath.belt || 'Standard Open';
+          return {
+            categoryId: cIdStr,
+            _id: cIdStr,
+            id: cIdStr,
+            categoryName: cName,
+            name: cName,
+            subCategory: cSub,
+            selectedSubcategory: cSub,
+            division: cSub,
+            fee: Number(c.fee) || 0,
+            lateFee: Number(c.lateFee) || 0,
+          };
+        }
+        const cIdStr = String(c || '').trim();
+        const cName = catMap[cIdStr] || 'Category';
+        return {
+          categoryId: cIdStr,
+          _id: cIdStr,
+          id: cIdStr,
+          categoryName: cName,
+          name: cName,
+          subCategory: ath.subCategory || ath.belt || 'Standard Open',
+          selectedSubcategory: ath.subCategory || ath.belt || 'Standard Open',
+          division: ath.subCategory || ath.belt || 'Standard Open',
+          fee: 0,
+          lateFee: 0,
+        };
+      });
+
       return {
         name: String(ath.name || `Athlete ${idx + 1}`).trim(),
         age: Number(ath.age) || 18,
         gender: ath.gender || 'Male',
         cnic: String(ath.cnic || 'N/A').trim(),
-        categoryName: catName || 'General Category',
-        selectedCategories: categoryObjectIds,
-        categories: categoryObjectIds,
+        categoryName: catName || (detailedCategories[0]?.categoryName || 'General Category'),
+        selectedCategories: detailedCategories.length > 0 ? detailedCategories : categoryObjectIds,
+        categories: detailedCategories.length > 0 ? detailedCategories : categoryObjectIds,
         subCategory: subDivisionName,
         division: subDivisionName,
         belt: ath.belt || 'white',
