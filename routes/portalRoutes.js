@@ -8,6 +8,7 @@ const Category = require('../models/Category');
 const Registration = require('../models/Registration');
 const Notification = require('../models/Notification');
 const portalController = require('../controllers/portalController');
+const adminController = require('../controllers/adminController');
 const videoController = require('../controllers/videoController');
 const videoUpload = require('../middlewares/videoUploadMiddleware');
 const { extractYouTubeId } = require('../utils/youtubeService');
@@ -298,6 +299,251 @@ router.get('/registrations', protect, async (req, res) => {
     });
   }
 });
+
+// ==========================================
+// 3B. GET DRAFT REGISTRATIONS
+// @route GET /api/v1/portal/registrations/drafts
+// ==========================================
+router.get('/registrations/drafts', protect, async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const drafts = await Registration.find({
+      $or: [
+        { userId: userId },
+        { user: userId },
+        { 'teamId.userId': userId },
+        { createdBy: userId },
+      ],
+      $and: [
+        {
+          $or: [
+            { registrationStatus: 'draft' },
+            { status: 'draft' },
+            { paymentStatus: 'unpaid' },
+            { paymentStatus: 'Unpaid' },
+            { isDraft: true },
+          ],
+        },
+      ],
+    })
+      .populate('eventId', 'title eventDate eventType status standardDeadline lateDeadline baseFee baseFeeUSD lateFeeRate lateFeeRateUSD coverImageUrl bankName accountTitle accountNumber iban bankDetails')
+      .populate('athletes.selectedCategories', 'name fee')
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    const enriched = await enrichRegistrationsWithCategories(drafts);
+    return res.status(200).json({ success: true, count: enriched.length, data: enriched });
+  } catch (error) {
+    console.error('Portal Get Drafts Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==========================================
+// 3C. GET SINGLE REGISTRATION (FOR DRAFT EDITING)
+// @route GET /api/v1/portal/registrations/:id
+// ==========================================
+router.get('/registrations/:id', protect, async (req, res) => {
+  try {
+    const reg = await Registration.findById(req.params.id)
+      .populate('eventId', 'title eventDate eventType status standardDeadline lateDeadline baseFee baseFeeUSD lateFeeRate lateFeeRateUSD coverImageUrl bankName accountTitle accountNumber iban bankDetails categoryFees categoryFeesUSD')
+      .populate('athletes.selectedCategories', 'name fee')
+      .lean();
+
+    if (!reg) {
+      return res.status(404).json({ success: false, message: 'Registration not found.' });
+    }
+
+    const enriched = await enrichRegistrationsWithCategories([reg]);
+    return res.status(200).json({ success: true, data: enriched[0] });
+  } catch (error) {
+    console.error('Portal Get Single Registration Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==========================================
+// 3D. UPDATE EXISTING DRAFT REGISTRATION
+// @route PUT /api/v1/portal/registrations/:id
+// ==========================================
+router.put('/registrations/:id', protect, async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { id } = req.params;
+    const {
+      athletes,
+      paymentOption,
+      paymentMethod,
+      transactionId,
+      paymentDate,
+      paymentSlipUrl,
+      slipUrl,
+      baseAmount,
+      lateFee,
+      isLateRegistration,
+      totalAmountDue,
+      currency,
+      isDraft,
+    } = req.body;
+
+    const existingReg = await Registration.findById(id);
+    if (!existingReg) {
+      return res.status(404).json({ success: false, message: 'Registration record not found.' });
+    }
+
+    let parsedAthletes = athletes;
+    if (typeof athletes === 'string') {
+      try {
+        parsedAthletes = JSON.parse(athletes);
+      } catch (e) {
+        parsedAthletes = [];
+      }
+    }
+
+    const allCategories = await Category.find().select('_id name title').lean();
+    const catMap = {};
+    allCategories.forEach((c) => {
+      const idStr = c._id ? c._id.toString() : '';
+      if (idStr) {
+        catMap[idStr] = c.name || c.title || '';
+      }
+    });
+
+    const isInt = currency === 'USD' || existingReg.currency === 'USD';
+
+    let sanitizedAthletes = existingReg.athletes;
+    if (Array.isArray(parsedAthletes) && parsedAthletes.length > 0) {
+      sanitizedAthletes = parsedAthletes.map((ath, idx) => {
+        const rawCategories = ath.selectedCategories || ath.categories || [];
+        const formattedCats = rawCategories.map((c) => {
+          let cId = typeof c === 'object' && c !== null ? (c.categoryId || c._id || c.id) : c;
+          let cName = typeof c === 'object' && c !== null ? (c.categoryName || c.name) : '';
+          let subCat = typeof c === 'object' && c !== null ? (c.subCategory || c.division || 'Standard Open') : 'Standard Open';
+          if (!cName && cId && catMap[String(cId)]) cName = catMap[String(cId)];
+          return {
+            categoryId: cId,
+            categoryName: cName || 'General',
+            name: cName || 'General',
+            subCategory: subCat,
+            selectedSubcategory: subCat,
+            division: subCat,
+            fee: Number(c?.fee) || 0,
+            lateFee: Number(c?.lateFee) || 0,
+            currency: isInt ? 'USD' : 'PKR',
+          };
+        });
+
+        const primaryCat = formattedCats[0] || {
+          categoryName: ath.categoryName || 'General',
+          subCategory: ath.subCategory || 'Standard Open',
+        };
+
+        const resolvedCatName = primaryCat.categoryName || 'General';
+        const resolvedSubCat = primaryCat.subCategory || 'Standard Open';
+
+        return {
+          _id: ath._id || new mongoose.Types.ObjectId(),
+          name: ath.name ? ath.name.trim() : `Athlete #${idx + 1}`,
+          age: Number(ath.age) || 0,
+          gender: ath.gender || 'Male',
+          cnic: (ath.cnic || ath.cnicOrBForm || '').trim(),
+          cnicOrBForm: (ath.cnic || ath.cnicOrBForm || '').trim(),
+          categoryName: resolvedCatName,
+          subCategory: resolvedSubCat,
+          selectedSubcategory: resolvedSubCat,
+          subDivision: resolvedSubCat,
+          division: resolvedSubCat,
+          belt: resolvedSubCat,
+          currency: isInt ? 'USD' : 'PKR',
+          paymentCurrency: isInt ? 'USD' : 'PKR',
+          isInternational: isInt,
+          categories: formattedCats,
+          selectedCategories: formattedCats,
+          videoUrl: ath.videoUrl || '',
+          submissionVideoUrl: ath.submissionVideoUrl || '',
+          youtubeUrl: ath.youtubeUrl || '',
+          youtubeId: ath.youtubeId || '',
+          videoStatus: ath.videoStatus || 'pending',
+        };
+      });
+    }
+
+    const draftMode = isDraft !== undefined ? Boolean(isDraft) : (existingReg.registrationStatus === 'draft');
+    const finalSlip = paymentSlipUrl || slipUrl || existingReg.paymentSlipUrl || '';
+
+    existingReg.athletes = sanitizedAthletes;
+    existingReg.totalAthletes = sanitizedAthletes.length;
+    existingReg.athletesCount = sanitizedAthletes.length;
+    if (paymentOption) existingReg.paymentOption = paymentOption;
+    if (paymentMethod) existingReg.paymentMethod = paymentMethod;
+    if (baseAmount !== undefined) existingReg.baseAmount = Number(baseAmount);
+    if (lateFee !== undefined) existingReg.lateFee = Number(lateFee);
+    if (totalAmountDue !== undefined) existingReg.totalAmountDue = Number(totalAmountDue);
+    if (isLateRegistration !== undefined) existingReg.isLateRegistration = Boolean(isLateRegistration);
+    if (currency) existingReg.currency = currency;
+
+    if (!draftMode && (finalSlip || (transactionId && transactionId !== 'DRAFT'))) {
+      existingReg.registrationStatus = 'under_review';
+      existingReg.status = 'under_review';
+      existingReg.paymentStatus = 'Pending';
+      existingReg.paymentSlipUrl = finalSlip;
+      existingReg.slipUrl = finalSlip;
+      existingReg.receiptUrl = finalSlip;
+      existingReg.paymentProof = finalSlip;
+      existingReg.transactionId = transactionId || existingReg.transactionId;
+      existingReg.paymentDate = paymentDate ? new Date(paymentDate) : new Date();
+      existingReg.totalAmountPaid = existingReg.totalAmountDue;
+      existingReg.remainingBalance = 0;
+    } else {
+      existingReg.registrationStatus = 'draft';
+      existingReg.status = 'draft';
+      existingReg.paymentStatus = 'unpaid';
+      existingReg.remainingBalance = existingReg.totalAmountDue;
+    }
+
+    existingReg.markModified('athletes');
+    await existingReg.save();
+
+    return res.status(200).json({
+      success: true,
+      message: draftMode ? 'Draft updated successfully.' : 'Registration submitted for verification.',
+      data: existingReg,
+    });
+  } catch (error) {
+    console.error('Portal Update Draft Registration Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==========================================
+// 3E. DELETE / DISCARD DRAFT REGISTRATION
+// @route DELETE /api/v1/portal/registrations/:id
+// ==========================================
+router.delete('/registrations/:id', protect, async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { id } = req.params;
+    const reg = await Registration.findById(id);
+    if (!reg) {
+      return res.status(404).json({ success: false, message: 'Registration not found.' });
+    }
+
+    const ownerId = reg.userId ? (reg.userId._id || reg.userId).toString() : '';
+    if (ownerId && ownerId !== userId.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this registration.' });
+    }
+
+    await Registration.findByIdAndDelete(id);
+    return res.status(200).json({ success: true, message: 'Draft registration discarded successfully.' });
+  } catch (error) {
+    console.error('Portal Delete Draft Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Athlete Update & Remove Aliases
+router.put('/registrations/:id/athletes/:athleteId', protect, adminController.updateRegistrationAthlete);
+router.delete('/registrations/:id/athletes/:athleteId', protect, adminController.deleteRegistrationAthlete);
 
 // ==========================================
 // 4. SUBMIT REGISTRATION

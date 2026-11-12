@@ -531,6 +531,127 @@ exports.updateRegistrationStatus = async (req, res) => {
 };
 
 // ==========================================
+// 5B. UPDATE REGISTRATION ATHLETE (ADMIN)
+// ==========================================
+exports.updateRegistrationAthlete = async (req, res) => {
+  try {
+    const { id, athleteId } = req.params;
+    const {
+      name,
+      age,
+      gender,
+      cnic,
+      cnicOrBForm,
+      subCategory,
+      division,
+      subDivision,
+      belt,
+      categoryName,
+      selectedCategories,
+      categories,
+    } = req.body;
+
+    const reg = await Registration.findById(id);
+    if (!reg) {
+      return res.status(404).json({ success: false, message: 'Registration not found.' });
+    }
+
+    let athleteIndex = -1;
+    if (athleteId && mongoose.Types.ObjectId.isValid(String(athleteId))) {
+      athleteIndex = reg.athletes.findIndex(
+        (a) => a._id && a._id.toString() === athleteId.toString()
+      );
+    }
+    if (athleteIndex === -1 && !isNaN(Number(athleteId))) {
+      athleteIndex = Number(athleteId);
+    }
+
+    if (athleteIndex === -1 || !reg.athletes[athleteIndex]) {
+      return res.status(404).json({ success: false, message: 'Athlete not found in registration.' });
+    }
+
+    const ath = reg.athletes[athleteIndex];
+    if (name !== undefined) ath.name = name.trim();
+    if (age !== undefined) ath.age = Number(age);
+    if (gender !== undefined) ath.gender = gender;
+    if (cnic !== undefined || cnicOrBForm !== undefined) {
+      const cleanCnic = (cnic || cnicOrBForm || '').trim();
+      ath.cnic = cleanCnic;
+      ath.cnicOrBForm = cleanCnic;
+    }
+    if (subCategory !== undefined) ath.subCategory = subCategory;
+    if (division !== undefined) ath.division = division;
+    if (subDivision !== undefined) ath.subDivision = subDivision;
+    if (belt !== undefined) ath.belt = belt;
+    if (categoryName !== undefined) ath.categoryName = categoryName;
+    if (Array.isArray(selectedCategories)) ath.selectedCategories = selectedCategories;
+    if (Array.isArray(categories)) ath.categories = categories;
+
+    reg.markModified('athletes');
+    await reg.save();
+
+    const populated = await Registration.findById(id)
+      .populate('userId', 'name email phone teamName')
+      .populate('eventId', 'title eventDate eventType status');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Athlete information updated successfully.',
+      data: formatRegistrationForAdmin(populated.toObject()),
+    });
+  } catch (error) {
+    console.error('updateRegistrationAthlete Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
+// 5C. DELETE REGISTRATION ATHLETE (ADMIN)
+// ==========================================
+exports.deleteRegistrationAthlete = async (req, res) => {
+  try {
+    const { id, athleteId } = req.params;
+    const reg = await Registration.findById(id);
+    if (!reg) {
+      return res.status(404).json({ success: false, message: 'Registration not found.' });
+    }
+
+    let athleteIndex = -1;
+    if (athleteId && mongoose.Types.ObjectId.isValid(String(athleteId))) {
+      athleteIndex = reg.athletes.findIndex(
+        (a) => a._id && a._id.toString() === athleteId.toString()
+      );
+    }
+    if (athleteIndex === -1 && !isNaN(Number(athleteId))) {
+      athleteIndex = Number(athleteId);
+    }
+
+    if (athleteIndex === -1 || !reg.athletes[athleteIndex]) {
+      return res.status(404).json({ success: false, message: 'Athlete not found in registration.' });
+    }
+
+    reg.athletes.splice(athleteIndex, 1);
+    reg.totalAthletes = reg.athletes.length;
+    reg.athletesCount = reg.athletes.length;
+    reg.markModified('athletes');
+    await reg.save();
+
+    const populated = await Registration.findById(id)
+      .populate('userId', 'name email phone teamName')
+      .populate('eventId', 'title eventDate eventType status');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Athlete removed successfully from registration.',
+      data: formatRegistrationForAdmin(populated.toObject()),
+    });
+  } catch (error) {
+    console.error('deleteRegistrationAthlete Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
 // 6. PAYMENTS LIST
 // ==========================================
 exports.getPayments = async (req, res) => {

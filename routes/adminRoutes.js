@@ -33,6 +33,12 @@ router.get('/teams', protect, adminController.getEventRegistrations);
 router.get('/registrations/:id', protect, adminController.getRegistrationById);
 router.get('/teams/:id', protect, adminController.getRegistrationById);
 
+// ATHLETE MANAGEMENT (ADMIN)
+router.put('/registrations/:id/athletes/:athleteId', protect, adminController.updateRegistrationAthlete);
+router.delete('/registrations/:id/athletes/:athleteId', protect, adminController.deleteRegistrationAthlete);
+router.put('/events/:eventId/registrations/:id/athletes/:athleteId', protect, adminController.updateRegistrationAthlete);
+router.delete('/events/:eventId/registrations/:id/athletes/:athleteId', protect, adminController.deleteRegistrationAthlete);
+
 // VERIFY PAYMENT & STATUS MUTATIONS
 router.all('/registrations/:id/verify-payment', protect, adminController.updateRegistrationStatus);
 router.all('/registrations/:id/status', protect, adminController.updateRegistrationStatus);
