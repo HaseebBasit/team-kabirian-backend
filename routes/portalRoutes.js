@@ -470,6 +470,7 @@ router.post('/registrations', protect, async (req, res) => {
       athletesCount: sanitizedAthletes.length,
       athletes: sanitizedAthletes,
       paymentOption: isDraft ? 'full' : (paymentOption || 'full'),
+      paymentMethod: req.body.paymentMethod || 'Bank Transfer',
       isLateRegistration: Boolean(isLateRegistration),
       baseAmount: Number(baseAmount) || 0,
       lateFee: Number(lateFee) || 0,
@@ -654,6 +655,7 @@ router.post('/registrations/:id/pay', protect, async (req, res) => {
     const {
       transactionId,
       paymentDate,
+      paymentMethod,
       paymentSlipUrl,
       slipUrl,
       paymentOption,
@@ -739,6 +741,7 @@ router.post('/registrations/:id/pay', protect, async (req, res) => {
     reg.paymentProof = finalSlip;
     reg.paymentSlip = finalSlip;
     if (paymentOption) reg.paymentOption = paymentOption;
+    if (paymentMethod) reg.paymentMethod = paymentMethod;
 
     await reg.save();
 

@@ -48,6 +48,7 @@ const registrationSchema = new mongoose.Schema(
 
     // Payment Details
     paymentOption: { type: String, default: 'full' },
+    paymentMethod: { type: String, default: 'Bank Transfer' },
     totalAmountDue: { type: Number, default: 0 },
     totalAmountPaid: { type: Number, default: 0 },
     remainingBalance: { type: Number, default: 0 },
