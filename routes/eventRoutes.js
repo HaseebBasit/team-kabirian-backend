@@ -18,10 +18,10 @@ const { protect, authorize } = require('../middlewares/authMiddleware');
 router.get('/', getEvents);
 router.get('/public', getPublicEvents);
 router.get('/:id', getEventById);
-router.post('/', protect, authorize('admin'), createEvent);
-router.put('/:id', protect, authorize('admin'), updateEvent);
-router.put('/:id/status', protect, authorize('admin'), updateEventStatus);
-router.delete('/:id', protect, authorize('admin'), deleteEvent);
+router.post('/', protect, createEvent);
+router.put('/:id', protect, updateEvent);
+router.put('/:id/status', protect, updateEventStatus);
+router.delete('/:id', protect, deleteEvent);
 
 // 2. ADMIN PORTAL DIRECT EVENT SUB-ROUTES
 // (Admin pages call /api/v1/events/:id/categories, :id/teams, :id/payments)

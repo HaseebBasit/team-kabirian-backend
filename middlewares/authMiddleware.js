@@ -60,18 +60,35 @@ const protect = async (req, res, next) => {
 // 2. Role Authorization Middleware
 const authorize = (...roles) => {
   return (req, res, next) => {
-    // If request user is master admin, bypass role checks completely
-    if (req.user && (req.user._id === 'admin-master' || req.user.role === 'admin')) {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, session missing.',
+      });
+    }
+
+    const userRole = String(req.user.role || '').toLowerCase().trim();
+
+    // Master Admin or administrative roles bypass role checks completely
+    if (
+      req.user._id === 'admin-master' ||
+      userRole === 'admin' ||
+      userRole === 'superadmin' ||
+      userRole === 'organizer' ||
+      userRole === 'manager'
+    ) {
       return next();
     }
 
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: `User role '${req.user?.role || 'unknown'}' is not authorized to access this route.`,
-      });
+    const normalizedRoles = roles.map((r) => String(r).toLowerCase().trim());
+    if (normalizedRoles.length === 0 || normalizedRoles.includes(userRole) || normalizedRoles.includes('*')) {
+      return next();
     }
-    next();
+
+    return res.status(403).json({
+      success: false,
+      message: `User role '${req.user?.role || 'unknown'}' is not authorized to access this route.`,
+    });
   };
 };
 

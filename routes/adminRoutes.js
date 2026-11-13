@@ -1,7 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
+const eventController = require('../controllers/eventController');
 const { protect } = require('../middlewares/authMiddleware');
+
+// 0. EVENT MANAGEMENT (ADMIN)
+router.post('/events', protect, eventController.createEvent);
+router.put('/events/:id', protect, eventController.updateEvent);
+router.put('/events/:id/status', protect, eventController.updateEventStatus);
+router.delete('/events/:id', protect, eventController.deleteEvent);
 
 // 1. DASHBOARD
 router.get('/dashboard', protect, adminController.getAdminDashboard);
