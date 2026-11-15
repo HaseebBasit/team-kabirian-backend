@@ -56,6 +56,15 @@ const formatRegistrationForAdmin = (reg) => {
 
   const athletesList = Array.isArray(reg.athletes) ? reg.athletes : [];
 
+  const totalCategoryEntries = athletesList.reduce((acc, a) => {
+    const raw = Array.isArray(a.selectedCategories) && a.selectedCategories.length > 0
+      ? a.selectedCategories
+      : Array.isArray(a.categories) && a.categories.length > 0
+      ? a.categories
+      : [];
+    return acc + (raw.length > 0 ? raw.length : 1);
+  }, 0);
+
   const slip =
     reg.paymentSlipUrl ||
     reg.paymentProofUrl ||
@@ -103,6 +112,9 @@ const formatRegistrationForAdmin = (reg) => {
     totalAthletes: athletesList.length,
     athletesCount: athletesList.length,
     athleteCount: athletesList.length,
+    totalCategoryEntries,
+    categoriesCount: totalCategoryEntries,
+    categoryEntriesCount: totalCategoryEntries,
     athletes: athletesList,
     players: athletesList,
     members: athletesList,
@@ -300,18 +312,29 @@ exports.getEventCategories = async (req, res) => {
             ? [ath.category || ath.categoryId]
             : [];
 
+          const matchedCatItem = rawCats.find((c) => {
+            const cid = extractIdStr(c);
+            const cname = typeof c === 'object' && c !== null ? (c.categoryName || c.name || c.title || '') : '';
+            return (
+              (cid && cid === catIdStr) ||
+              (cname && (cname.toLowerCase().trim() === catNameLower ||
+                         catNameLower.includes(cname.toLowerCase().trim()) ||
+                         cname.toLowerCase().trim().includes(catNameLower)))
+            );
+          });
+
           const matchesCategory =
-            rawCats.some((c) => {
-              const cid = extractIdStr(c);
-              return cid && cid === catIdStr;
-            }) ||
-            (ath.categoryName && ath.categoryName.toLowerCase().trim() === catNameLower) ||
+            Boolean(matchedCatItem) ||
+            (ath.categoryName && (ath.categoryName.toLowerCase().trim() === catNameLower ||
+                                  catNameLower.includes(ath.categoryName.toLowerCase().trim()) ||
+                                  ath.categoryName.toLowerCase().trim().includes(catNameLower))) ||
             categories.length === 1 ||
             (rawCats.length === 0 && idx === 0);
 
           if (matchesCategory) {
             matchingAthletes.push(ath);
             const subKey = String(
+              (matchedCatItem && (matchedCatItem.subCategory || matchedCatItem.selectedSubcategory || matchedCatItem.division)) ||
               ath.subCategory || ath.division || ath.subDivision || ath.belt || 'white'
             )
               .toLowerCase()
