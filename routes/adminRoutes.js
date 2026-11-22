@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
 const eventController = require('../controllers/eventController');
+const categoryController = require('../controllers/categoryController');
 const { protect } = require('../middlewares/authMiddleware');
 
 // 0. EVENT MANAGEMENT (ADMIN)
@@ -31,6 +32,11 @@ router.patch('/notifications/read-all', protect, (req, res, next) => {
 // 3. CATEGORIES
 router.get('/events/:eventId/categories', protect, adminController.getEventCategories);
 router.get('/categories', protect, adminController.getEventCategories);
+router.post('/events/:eventId/categories', protect, categoryController.createCategory);
+router.post('/categories', protect, categoryController.createCategory);
+router.put('/categories/:id', protect, categoryController.updateCategory);
+router.patch('/categories/:id', protect, categoryController.updateCategory);
+router.delete('/categories/:id', protect, categoryController.deleteCategory);
 
 // 4. TEAMS & REGISTRATIONS
 router.get('/events/:eventId/registrations', protect, adminController.getEventRegistrations);

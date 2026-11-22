@@ -229,7 +229,10 @@ exports.getCategoryById = async (req, res) => {
 // 4. CREATE CATEGORY
 exports.createCategory = async (req, res) => {
   try {
-    const { eventId, name, baseFee, fee, lateFee, baseFeeUSD, lateFeeUSD, subcategories, subDivisions } = req.body;
+    const rawEventId = req.body.eventId || req.body.event || req.body.tournamentId || req.params.eventId || req.params.id;
+    const cleanEventId = extractIdString(rawEventId);
+
+    const { name, baseFee, fee, lateFee, baseFeeUSD, lateFeeUSD, subcategories, subDivisions, status } = req.body;
 
     const subList = Array.isArray(subcategories || subDivisions)
       ? (subcategories || subDivisions)
@@ -239,16 +242,27 @@ exports.createCategory = async (req, res) => {
           .filter(Boolean);
 
     const newCategory = await Category.create({
-      eventId,
-      event: eventId,
+      eventId: cleanEventId || undefined,
+      event: cleanEventId || undefined,
       name: String(name || 'Division').trim(),
       baseFee: Number(baseFee || fee) || 2000,
       lateFee: Number(lateFee) || 0,
       baseFeeUSD: Number(baseFeeUSD) || 20,
       lateFeeUSD: Number(lateFeeUSD) || 5,
       subcategories: subList.length > 0 ? subList : ['white', 'blue', 'green'],
-      status: 'active',
+      status: status || 'active',
     });
+
+    // Auto-link category to event's categories array
+    if (cleanEventId && mongoose.Types.ObjectId.isValid(cleanEventId)) {
+      try {
+        await Event.findByIdAndUpdate(cleanEventId, {
+          $addToSet: { categories: newCategory._id },
+        });
+      } catch (linkErr) {
+        console.warn('Could not auto-link category to event:', linkErr.message);
+      }
+    }
 
     return res.status(201).json({
       success: true,
@@ -287,7 +301,16 @@ exports.updateCategory = async (req, res) => {
 // 6. DELETE CATEGORY
 exports.deleteCategory = async (req, res) => {
   try {
-    await Category.findByIdAndDelete(req.params.id);
+    const catId = req.params.id;
+    await Category.findByIdAndDelete(catId);
+
+    // Pull from any event holding this category
+    try {
+      await Event.updateMany({}, { $pull: { categories: catId } });
+    } catch (pullErr) {
+      console.warn('Could not pull deleted category from events:', pullErr.message);
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Category deleted successfully.',

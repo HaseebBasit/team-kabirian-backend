@@ -12,6 +12,7 @@ const {
 } = require('../controllers/eventController');
 
 const adminController = require('../controllers/adminController');
+const categoryController = require('../controllers/categoryController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
 // 1. STANDARD EVENT ROUTES
@@ -27,6 +28,8 @@ router.delete('/:id', protect, deleteEvent);
 // (Admin pages call /api/v1/events/:id/categories, :id/teams, :id/payments)
 router.get('/:id/categories', protect, adminController.getEventCategories);
 router.get('/:id/divisions', protect, adminController.getEventCategories);
+router.post('/:id/categories', protect, categoryController.createCategory);
+router.post('/:id/divisions', protect, categoryController.createCategory);
 
 router.get('/:id/teams', protect, adminController.getEventRegistrations);
 router.get('/:id/registrations', protect, adminController.getEventRegistrations);

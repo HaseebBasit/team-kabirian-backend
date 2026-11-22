@@ -577,13 +577,19 @@ exports.updateEvent = async (req, res) => {
     if (description !== undefined) event.description = description;
     if (coverImageUrl) event.coverImageUrl = coverImageUrl;
     if (ruleBookPdfUrl !== undefined) event.ruleBookPdfUrl = ruleBookPdfUrl;
+    const safeDate = (val) => {
+      if (!val || val === '' || val === null || val === undefined) return undefined;
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? undefined : d;
+    };
+
     if (ruleBookText !== undefined) event.ruleBookText = ruleBookText;
     if (eventType !== undefined) event.eventType = eventType;
-    if (eventDate !== undefined) event.eventDate = eventDate;
-    if (standardDeadline !== undefined) event.standardDeadline = standardDeadline;
-    if (lateFeeStartDate !== undefined) event.lateFeeStartDate = lateFeeStartDate;
-    if (registrationDeadline !== undefined) event.registrationDeadline = registrationDeadline;
-    if (lateFee !== undefined) event.lateFee = Number(lateFee);
+    if (eventDate !== undefined) event.eventDate = safeDate(eventDate) || event.eventDate;
+    if (standardDeadline !== undefined) event.standardDeadline = safeDate(standardDeadline) || event.standardDeadline;
+    if (lateFeeStartDate !== undefined) event.lateFeeStartDate = safeDate(lateFeeStartDate);
+    if (registrationDeadline !== undefined) event.registrationDeadline = safeDate(registrationDeadline) || event.registrationDeadline;
+    if (lateFee !== undefined) event.lateFee = Number(lateFee) || 0;
     if (status !== undefined) event.status = status;
 
     if (bankName !== undefined || bankDetails?.bankName !== undefined) {
@@ -616,7 +622,7 @@ exports.updateEvent = async (req, res) => {
     }
 
     if (Array.isArray(categories)) {
-      const finalLateCutoff = event.lateFeeStartDate || event.standardDeadline;
+      const finalLateCutoff = safeDate(event.lateFeeStartDate) || safeDate(event.standardDeadline) || undefined;
       const updatedCatIds = [];
 
       const existingDbCategories = await Category.find({
@@ -644,6 +650,7 @@ exports.updateEvent = async (req, res) => {
             {
               name: (cat.name || 'Category').trim(),
               baseFee: Number(cat.baseFee || cat.fee) || 2000,
+              fee: Number(cat.baseFee || cat.fee) || 2000,
               lateFee: Number(cat.lateFee) || Number(event.lateFee) || 0,
               baseFeeUSD: Number(cat.baseFeeUSD) || 20,
               lateFeeUSD: Number(cat.lateFeeUSD) || 5,
@@ -659,6 +666,7 @@ exports.updateEvent = async (req, res) => {
             event: event._id,
             name: (cat.name || 'Category').trim(),
             baseFee: Number(cat.baseFee || cat.fee) || 2000,
+            fee: Number(cat.baseFee || cat.fee) || 2000,
             lateFee: Number(cat.lateFee) || Number(event.lateFee) || 0,
             baseFeeUSD: Number(cat.baseFeeUSD) || 20,
             lateFeeUSD: Number(cat.lateFeeUSD) || 5,

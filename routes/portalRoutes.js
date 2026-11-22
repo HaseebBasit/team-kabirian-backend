@@ -127,6 +127,9 @@ const enrichRegistrationsWithCategories = async (registrations) => {
 router.get('/dashboard', protect, async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
+    const userObjId = mongoose.Types.ObjectId.isValid(String(userId)) ? new mongoose.Types.ObjectId(String(userId)) : null;
+    const userIdStr = String(userId);
+    const userEmail = req.user.email ? String(req.user.email).trim().toLowerCase() : '';
 
     const events = await Event.find({
       status: { $in: ['live', 'upcoming'] },
@@ -136,10 +139,12 @@ router.get('/dashboard', protect, async (req, res) => {
 
     const myRegistrations = await Registration.find({
       $or: [
-        { userId: userId },
-        { user: userId },
-        { 'teamId.userId': userId },
-        { createdBy: userId },
+        ...(userObjId ? [{ userId: userObjId }, { user: userObjId }, { 'teamId.userId': userObjId }, { createdBy: userObjId }] : []),
+        { userId: userIdStr },
+        { user: userIdStr },
+        { 'teamId.userId': userIdStr },
+        { createdBy: userIdStr },
+        ...(userEmail ? [{ coachEmail: userEmail }, { email: userEmail }, { coachEmail: new RegExp(`^${userEmail}$`, 'i') }, { email: new RegExp(`^${userEmail}$`, 'i') }] : []),
       ],
     })
       .populate('eventId', 'title eventDate eventType status standardDeadline coverImageUrl')
