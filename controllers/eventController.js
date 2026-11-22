@@ -628,7 +628,9 @@ exports.updateEvent = async (req, res) => {
       const existingDbCategories = await Category.find({
         $or: [{ eventId: event._id }, { event: event._id }],
       });
-      const incomingCategoryIds = categories.filter((c) => c._id).map((c) => c._id.toString());
+      const incomingCategoryIds = categories
+        .filter((c) => c._id && mongoose.Types.ObjectId.isValid(String(c._id)))
+        .map((c) => c._id.toString());
 
       for (const oldCat of existingDbCategories) {
         if (!incomingCategoryIds.includes(oldCat._id.toString())) {
@@ -644,7 +646,9 @@ exports.updateEvent = async (req, res) => {
               .map((s) => s.trim())
               .filter(Boolean);
 
-        if (cat._id) {
+        const hasValidId = cat._id && mongoose.Types.ObjectId.isValid(String(cat._id));
+
+        if (hasValidId) {
           const updatedCat = await Category.findByIdAndUpdate(
             cat._id,
             {
@@ -657,7 +661,7 @@ exports.updateEvent = async (req, res) => {
               lateFeeStartDate: finalLateCutoff,
               subcategories: subcats.length > 0 ? subcats : ['white', 'blue', 'green'],
             },
-            { returnDocument: 'after' }
+            { new: true, runValidators: true }
           );
           if (updatedCat) updatedCatIds.push(updatedCat._id);
         } else {

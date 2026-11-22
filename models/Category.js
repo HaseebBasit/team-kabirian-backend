@@ -24,7 +24,9 @@ categorySchema.pre('save', function (next) {
     if (this.price === undefined) this.price = this.baseFee;
     if (this.entryFee === undefined) this.entryFee = this.baseFee;
   }
-  next();
+  if (typeof next === 'function') {
+    return next();
+  }
 });
 
 module.exports = mongoose.model('Category', categorySchema);
