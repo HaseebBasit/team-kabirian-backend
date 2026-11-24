@@ -3,6 +3,7 @@ const Event = require('../models/Event');
 const Category = require('../models/Category');
 const Registration = require('../models/Registration');
 const Notification = require('../models/Notification');
+const User = require('../models/User');
 
 // Safe Dynamic Result Model with strict: false (Prevents StrictModeError)
 const resultSchemaFields = {
@@ -534,6 +535,19 @@ exports.updateRegistrationStatus = async (req, res) => {
       updateFields.athletes = athletes;
     }
 
+    if (req.body.teamName !== undefined) updateFields.teamName = req.body.teamName.trim();
+    if (req.body.coachName !== undefined) updateFields.coachName = req.body.coachName.trim();
+    if (req.body.coachPhone !== undefined || req.body.phone !== undefined) {
+      const p = (req.body.coachPhone || req.body.phone || '').trim();
+      updateFields.coachPhone = p;
+      updateFields.phone = p;
+    }
+    if (req.body.coachEmail !== undefined || req.body.email !== undefined) {
+      const em = (req.body.coachEmail || req.body.email || '').trim();
+      updateFields.coachEmail = em;
+      updateFields.email = em;
+    }
+
     const updated = await Registration.findByIdAndUpdate(
       id,
       { $set: updateFields },
@@ -572,6 +586,9 @@ exports.updateRegistrationAthlete = async (req, res) => {
       categoryName,
       selectedCategories,
       categories,
+      athleteIndex: bodyAthleteIndex,
+      originalName,
+      originalCnic,
     } = req.body;
 
     const reg = await Registration.findById(id);
@@ -580,13 +597,39 @@ exports.updateRegistrationAthlete = async (req, res) => {
     }
 
     let athleteIndex = -1;
+    // 1. By ObjectId match
     if (athleteId && mongoose.Types.ObjectId.isValid(String(athleteId))) {
       athleteIndex = reg.athletes.findIndex(
         (a) => a._id && a._id.toString() === athleteId.toString()
       );
     }
-    if (athleteIndex === -1 && !isNaN(Number(athleteId))) {
-      athleteIndex = Number(athleteId);
+    // 2. By numeric athleteId param
+    if (athleteIndex === -1 && athleteId !== undefined && athleteId !== null && !isNaN(Number(athleteId))) {
+      const idxNum = Number(athleteId);
+      if (idxNum >= 0 && idxNum < reg.athletes.length) {
+        athleteIndex = idxNum;
+      }
+    }
+    // 3. By bodyAthleteIndex
+    if (athleteIndex === -1 && bodyAthleteIndex !== undefined && !isNaN(Number(bodyAthleteIndex))) {
+      const idxNum = Number(bodyAthleteIndex);
+      if (idxNum >= 0 && idxNum < reg.athletes.length) {
+        athleteIndex = idxNum;
+      }
+    }
+    // 4. By originalName or name fallback
+    if (athleteIndex === -1 && (originalName || name)) {
+      const targetName = (originalName || name || '').trim().toLowerCase();
+      athleteIndex = reg.athletes.findIndex(
+        (a) => (a.name || '').trim().toLowerCase() === targetName
+      );
+    }
+    // 5. By originalCnic or cnic fallback
+    if (athleteIndex === -1 && (originalCnic || cnic || cnicOrBForm)) {
+      const targetCnic = (originalCnic || cnic || cnicOrBForm || '').trim().toLowerCase();
+      athleteIndex = reg.athletes.findIndex(
+        (a) => (a.cnic || a.cnicOrBForm || '').trim().toLowerCase() === targetCnic
+      );
     }
 
     if (athleteIndex === -1 || !reg.athletes[athleteIndex]) {
@@ -602,13 +645,56 @@ exports.updateRegistrationAthlete = async (req, res) => {
       ath.cnic = cleanCnic;
       ath.cnicOrBForm = cleanCnic;
     }
-    if (subCategory !== undefined) ath.subCategory = subCategory;
-    if (division !== undefined) ath.division = division;
-    if (subDivision !== undefined) ath.subDivision = subDivision;
-    if (belt !== undefined) ath.belt = belt;
+
+    const resolvedSubCategory = subCategory !== undefined ? subCategory : division !== undefined ? division : belt;
+    if (resolvedSubCategory !== undefined) {
+      ath.subCategory = resolvedSubCategory;
+      ath.division = resolvedSubCategory;
+      ath.subDivision = resolvedSubCategory;
+      ath.belt = resolvedSubCategory;
+    }
     if (categoryName !== undefined) ath.categoryName = categoryName;
-    if (Array.isArray(selectedCategories)) ath.selectedCategories = selectedCategories;
-    if (Array.isArray(categories)) ath.categories = categories;
+
+    const newCatName = categoryName || ath.categoryName || 'General';
+    const newSubCat = resolvedSubCategory || ath.subCategory || ath.division || ath.belt || 'Standard Open';
+
+    if (Array.isArray(selectedCategories) && selectedCategories.length > 0) {
+      ath.selectedCategories = selectedCategories;
+    } else if (Array.isArray(ath.selectedCategories) && ath.selectedCategories.length > 0) {
+      ath.selectedCategories = ath.selectedCategories.map((c) => {
+        if (typeof c === 'object' && c !== null) {
+          return {
+            ...c,
+            categoryName: newCatName || c.categoryName || c.name,
+            name: newCatName || c.name || c.categoryName,
+            subCategory: newSubCat || c.subCategory || c.division,
+            division: newSubCat || c.division || c.subCategory,
+          };
+        }
+        return c;
+      });
+    } else if (newCatName || newSubCat) {
+      ath.selectedCategories = [{ categoryName: newCatName, subCategory: newSubCat }];
+    }
+
+    if (Array.isArray(categories) && categories.length > 0) {
+      ath.categories = categories;
+    } else if (Array.isArray(ath.categories) && ath.categories.length > 0) {
+      ath.categories = ath.categories.map((c) => {
+        if (typeof c === 'object' && c !== null) {
+          return {
+            ...c,
+            categoryName: newCatName || c.categoryName || c.name,
+            name: newCatName || c.name || c.categoryName,
+            subCategory: newSubCat || c.subCategory || c.division,
+            division: newSubCat || c.division || c.subCategory,
+          };
+        }
+        return c;
+      });
+    } else if (newCatName || newSubCat) {
+      ath.categories = [{ categoryName: newCatName, subCategory: newSubCat }];
+    }
 
     reg.markModified('athletes');
     await reg.save();
@@ -646,7 +732,15 @@ exports.deleteRegistrationAthlete = async (req, res) => {
       );
     }
     if (athleteIndex === -1 && !isNaN(Number(athleteId))) {
-      athleteIndex = Number(athleteId);
+      const idxNum = Number(athleteId);
+      if (idxNum >= 0 && idxNum < reg.athletes.length) {
+        athleteIndex = idxNum;
+      }
+    }
+    if (athleteIndex === -1 && req.body && req.body.originalName) {
+      athleteIndex = reg.athletes.findIndex(
+        (a) => (a.name || '').trim().toLowerCase() === String(req.body.originalName).trim().toLowerCase()
+      );
     }
 
     if (athleteIndex === -1 || !reg.athletes[athleteIndex]) {
@@ -670,6 +764,68 @@ exports.deleteRegistrationAthlete = async (req, res) => {
     });
   } catch (error) {
     console.error('deleteRegistrationAthlete Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
+// 5D. UPDATE REGISTRATION TEAM DATA (ADMIN)
+// ==========================================
+exports.updateRegistrationTeam = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { teamName, coachName, coachPhone, coachEmail, phone, email } = req.body;
+
+    if (!id || !mongoose.Types.ObjectId.isValid(String(id))) {
+      return res.status(400).json({ success: false, message: 'Valid Registration ID is required.' });
+    }
+
+    const reg = await Registration.findById(id);
+    if (!reg) {
+      return res.status(404).json({ success: false, message: 'Registration not found.' });
+    }
+
+    const updateFields = {};
+    if (teamName !== undefined) updateFields.teamName = String(teamName).trim();
+    if (coachName !== undefined) updateFields.coachName = String(coachName).trim();
+    if (coachPhone !== undefined || phone !== undefined) {
+      const p = String(coachPhone || phone || '').trim();
+      updateFields.coachPhone = p;
+      updateFields.phone = p;
+    }
+    if (coachEmail !== undefined || email !== undefined) {
+      const em = String(coachEmail || email || '').trim();
+      updateFields.coachEmail = em;
+      updateFields.email = em;
+    }
+
+    const updated = await Registration.findByIdAndUpdate(
+      id,
+      { $set: updateFields },
+      { returnDocument: 'after' }
+    )
+      .populate('userId', 'name email phone teamName')
+      .populate('eventId', 'title eventDate eventType status');
+
+    if (reg.userId && (updateFields.teamName || updateFields.phone || updateFields.coachName)) {
+      try {
+        await User.findByIdAndUpdate(reg.userId, {
+          $set: {
+            ...(updateFields.teamName ? { teamName: updateFields.teamName } : {}),
+            ...(updateFields.coachName ? { name: updateFields.coachName } : {}),
+            ...(updateFields.phone ? { phone: updateFields.phone } : {}),
+          },
+        });
+      } catch (_) {}
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Team information updated successfully.',
+      data: formatRegistrationForAdmin(updated.toObject()),
+    });
+  } catch (error) {
+    console.error('updateRegistrationTeam Error:', error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

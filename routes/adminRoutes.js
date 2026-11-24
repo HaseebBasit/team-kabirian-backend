@@ -45,6 +45,10 @@ router.get('/registrations', protect, adminController.getEventRegistrations);
 router.get('/teams', protect, adminController.getEventRegistrations);
 router.get('/registrations/:id', protect, adminController.getRegistrationById);
 router.get('/teams/:id', protect, adminController.getRegistrationById);
+router.put('/registrations/:id', protect, adminController.updateRegistrationTeam);
+router.patch('/registrations/:id', protect, adminController.updateRegistrationTeam);
+router.put('/teams/:id', protect, adminController.updateRegistrationTeam);
+router.patch('/teams/:id', protect, adminController.updateRegistrationTeam);
 
 // ATHLETE MANAGEMENT (ADMIN)
 router.put('/registrations/:id/athletes/:athleteId', protect, adminController.updateRegistrationAthlete);

@@ -547,6 +547,7 @@ router.delete('/registrations/:id', protect, async (req, res) => {
 });
 
 // Athlete Update & Remove Aliases
+router.put('/registrations/:id', protect, adminController.updateRegistrationTeam);
 router.put('/registrations/:id/athletes/:athleteId', protect, adminController.updateRegistrationAthlete);
 router.delete('/registrations/:id/athletes/:athleteId', protect, adminController.deleteRegistrationAthlete);
 
