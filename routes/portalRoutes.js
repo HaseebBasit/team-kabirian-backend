@@ -147,7 +147,7 @@ router.get('/dashboard', protect, async (req, res) => {
         ...(userEmail ? [{ coachEmail: userEmail }, { email: userEmail }, { coachEmail: new RegExp(`^${userEmail}$`, 'i') }, { email: new RegExp(`^${userEmail}$`, 'i') }] : []),
       ],
     })
-      .populate('eventId', 'title eventDate eventType status standardDeadline coverImageUrl')
+      .populate('eventId', 'title eventDate eventType status standardDeadline coverImageUrl videoSubmissionsOpen isVideoUnlocked')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -283,7 +283,7 @@ router.get('/registrations', protect, async (req, res) => {
         { createdBy: userId },
       ],
     })
-      .populate('eventId', 'title eventDate eventType status standardDeadline coverImageUrl bankName accountTitle accountNumber iban bankDetails')
+      .populate('eventId', 'title eventDate eventType status standardDeadline coverImageUrl bankName accountTitle accountNumber iban bankDetails videoSubmissionsOpen isVideoUnlocked')
       .populate('athletes.selectedCategories', 'name fee')
       .sort({ createdAt: -1 })
       .lean();
@@ -331,7 +331,7 @@ router.get('/registrations/drafts', protect, async (req, res) => {
         },
       ],
     })
-      .populate('eventId', 'title eventDate eventType status standardDeadline lateDeadline baseFee baseFeeUSD lateFeeRate lateFeeRateUSD coverImageUrl bankName accountTitle accountNumber iban bankDetails')
+      .populate('eventId', 'title eventDate eventType status standardDeadline lateDeadline baseFee baseFeeUSD lateFeeRate lateFeeRateUSD coverImageUrl bankName accountTitle accountNumber iban bankDetails videoSubmissionsOpen isVideoUnlocked')
       .populate('athletes.selectedCategories', 'name fee')
       .sort({ updatedAt: -1 })
       .lean();
@@ -351,7 +351,7 @@ router.get('/registrations/drafts', protect, async (req, res) => {
 router.get('/registrations/:id', protect, async (req, res) => {
   try {
     const reg = await Registration.findById(req.params.id)
-      .populate('eventId', 'title eventDate eventType status standardDeadline lateDeadline baseFee baseFeeUSD lateFeeRate lateFeeRateUSD coverImageUrl bankName accountTitle accountNumber iban bankDetails categoryFees categoryFeesUSD')
+      .populate('eventId', 'title eventDate eventType status standardDeadline lateDeadline baseFee baseFeeUSD lateFeeRate lateFeeRateUSD coverImageUrl bankName accountTitle accountNumber iban bankDetails categoryFees categoryFeesUSD videoSubmissionsOpen isVideoUnlocked')
       .populate('athletes.selectedCategories', 'name fee')
       .lean();
 
@@ -787,6 +787,19 @@ const saveAthleteVideoHandler = async (req, res) => {
     const reg = await Registration.findById(regId);
     if (!reg) {
       return res.status(404).json({ success: false, message: 'Registration nahi mili' });
+    }
+
+    // Video Submission Lock Enforcement:
+    const event = reg.eventId ? await Event.findById(reg.eventId._id || reg.eventId).lean() : null;
+    const isEventUnlocked = Boolean(event && (event.videoSubmissionsOpen || event.isVideoUnlocked));
+    const isRegUnlocked = Boolean(reg.isVideoUnlocked);
+
+    if (!isEventUnlocked && !isRegUnlocked) {
+      return res.status(403).json({
+        success: false,
+        message: 'Online video submissions are currently locked by administration for this tournament.',
+        isLocked: true,
+      });
     }
 
     const extractedYtId = extractYouTubeId(videoUrl);

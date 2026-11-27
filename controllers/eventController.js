@@ -9,7 +9,7 @@ const Result = require('../models/Result');
 exports.getPublicEvents = async (_req, res) => {
   try {
     const events = await Event.find({ status: { $in: ['upcoming', 'live', 'closed', 'ended'] } })
-      .select('title slug description coverImageUrl ruleBookPdfUrl ruleBookText eventType eventDate standardDeadline lateFeeStartDate registrationDeadline status categories createdAt')
+      .select('title slug description coverImageUrl ruleBookPdfUrl ruleBookText eventType eventDate standardDeadline lateFeeStartDate registrationDeadline status categories videoSubmissionsOpen isVideoUnlocked createdAt')
       .sort({ eventDate: 1 })
       .lean();
 
@@ -68,6 +68,8 @@ exports.getPublicEvents = async (_req, res) => {
         categories: eventCats,
         eventEnded,
         registrationOpen: event.status === 'live' && !eventEnded,
+        videoSubmissionsOpen: Boolean(event.videoSubmissionsOpen || event.isVideoUnlocked),
+        isVideoUnlocked: Boolean(event.videoSubmissionsOpen || event.isVideoUnlocked),
       };
     });
 
@@ -478,6 +480,8 @@ exports.createEvent = async (req, res) => {
         qrCodeUrl: resolvedQrCode,
       },
       status: 'upcoming',
+      videoSubmissionsOpen: Boolean(req.body.videoSubmissionsOpen || req.body.isVideoUnlocked || false),
+      isVideoUnlocked: Boolean(req.body.videoSubmissionsOpen || req.body.isVideoUnlocked || false),
       categories: [],
     });
 
@@ -591,6 +595,15 @@ exports.updateEvent = async (req, res) => {
     if (registrationDeadline !== undefined) event.registrationDeadline = safeDate(registrationDeadline) || event.registrationDeadline;
     if (lateFee !== undefined) event.lateFee = Number(lateFee) || 0;
     if (status !== undefined) event.status = status;
+    if (req.body.videoSubmissionsOpen !== undefined) {
+      const isOpen = Boolean(req.body.videoSubmissionsOpen);
+      event.videoSubmissionsOpen = isOpen;
+      event.isVideoUnlocked = isOpen;
+    } else if (req.body.isVideoUnlocked !== undefined) {
+      const isOpen = Boolean(req.body.isVideoUnlocked);
+      event.videoSubmissionsOpen = isOpen;
+      event.isVideoUnlocked = isOpen;
+    }
 
     if (bankName !== undefined || bankDetails?.bankName !== undefined) {
       const bVal = String(bankName !== undefined ? bankName : bankDetails?.bankName || '').trim();
@@ -741,6 +754,40 @@ exports.deleteEvent = async (req, res) => {
       message: 'Tournament and linked records deleted successfully.',
     });
   } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
+// 7. TOGGLE EVENT VIDEO SUBMISSIONS LOCK
+// ==========================================
+exports.toggleEventVideoLock = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Tournament not found.' });
+    }
+
+    const currentStatus = Boolean(event.videoSubmissionsOpen || event.isVideoUnlocked);
+    const newStatus = req.body.videoSubmissionsOpen !== undefined
+      ? Boolean(req.body.videoSubmissionsOpen)
+      : req.body.unlock !== undefined
+        ? Boolean(req.body.unlock)
+        : !currentStatus;
+
+    event.videoSubmissionsOpen = newStatus;
+    event.isVideoUnlocked = newStatus;
+    await event.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Video submissions ${newStatus ? 'UNLOCKED' : 'LOCKED'} successfully for "${event.title}".`,
+      videoSubmissionsOpen: newStatus,
+      isVideoUnlocked: newStatus,
+      data: event,
+    });
+  } catch (error) {
+    console.error('toggleEventVideoLock Error:', error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

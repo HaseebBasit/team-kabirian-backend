@@ -9,6 +9,7 @@ const {
   updateEvent,
   updateEventStatus,
   deleteEvent,
+  toggleEventVideoLock,
 } = require('../controllers/eventController');
 
 const adminController = require('../controllers/adminController');
@@ -22,6 +23,8 @@ router.get('/:id', getEventById);
 router.post('/', protect, createEvent);
 router.put('/:id', protect, updateEvent);
 router.put('/:id/status', protect, updateEventStatus);
+router.put('/:id/toggle-video-lock', protect, toggleEventVideoLock);
+router.put('/:id/video-lock', protect, toggleEventVideoLock);
 router.delete('/:id', protect, deleteEvent);
 
 // 2. ADMIN PORTAL DIRECT EVENT SUB-ROUTES

@@ -1,4 +1,5 @@
 const fs = require('fs');
+const Event = require('../models/Event');
 const Registration = require('../models/Registration');
 const { uploadVideoToYouTube, extractYouTubeId, normalizeVideoUrl } = require('../utils/youtubeService');
 
@@ -24,6 +25,23 @@ exports.uploadAthleteVideo = async (req, res) => {
     const reg = await Registration.findById(regId);
     if (!reg) {
       return res.status(404).json({ success: false, message: 'Registration record not found.' });
+    }
+
+    // Video Submission Lock Enforcement:
+    // Event must be explicitly unlocked by admin (or team explicitly unlocked)
+    const event = reg.eventId ? await Event.findById(reg.eventId._id || reg.eventId).lean() : null;
+    const isEventUnlocked = Boolean(event && (event.videoSubmissionsOpen || event.isVideoUnlocked));
+    const isRegUnlocked = Boolean(reg.isVideoUnlocked);
+
+    if (!isEventUnlocked && !isRegUnlocked) {
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        try { fs.unlinkSync(tempFilePath); } catch (e) {}
+      }
+      return res.status(403).json({
+        success: false,
+        message: 'Online video submissions are currently locked by administration for this tournament.',
+        isLocked: true,
+      });
     }
 
     let finalVideoUrl = '';

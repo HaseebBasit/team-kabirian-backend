@@ -221,7 +221,7 @@ exports.getPortalNotifications = async (req, res) => {
     if (team?._id) queryConditions.push({ teamId: team._id });
 
     const myRegistrations = await Registration.find({$or: queryConditions })
-      .populate('eventId', 'title eventType')
+      .populate('eventId', 'title eventType videoSubmissionsOpen isVideoUnlocked')
       .sort({ updatedAt: -1 })
       .lean();
 
@@ -237,7 +237,9 @@ exports.getPortalNotifications = async (req, res) => {
       const isRejected = regStatus === 'rejected';
       const isHalf = (reg.paymentOption || '').toLowerCase() === 'half';
       const hasRemainingSlip = Boolean(reg.remainingSlipUrl || reg.remainingPaymentSlipUrl);
-      const isVideoUnlocked = Boolean(reg.isVideoUnlocked || reg.videoUnlocked || isApproved);
+      const isEventVideoUnlocked = Boolean(reg.eventId?.videoSubmissionsOpen || reg.eventId?.isVideoUnlocked);
+      const isRegVideoUnlocked = Boolean(reg.isVideoUnlocked || reg.videoUnlocked);
+      const isVideoUnlocked = Boolean((isEventVideoUnlocked || isRegVideoUnlocked) && isApproved);
 
       // A. Registration Approval / Rejection Notification
       if (isApproved) {

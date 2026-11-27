@@ -9,6 +9,8 @@ const { protect } = require('../middlewares/authMiddleware');
 router.post('/events', protect, eventController.createEvent);
 router.put('/events/:id', protect, eventController.updateEvent);
 router.put('/events/:id/status', protect, eventController.updateEventStatus);
+router.put('/events/:id/toggle-video-lock', protect, eventController.toggleEventVideoLock);
+router.put('/events/:id/video-lock', protect, eventController.toggleEventVideoLock);
 router.delete('/events/:id', protect, eventController.deleteEvent);
 
 // 1. DASHBOARD

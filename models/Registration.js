@@ -70,6 +70,8 @@ const registrationSchema = new mongoose.Schema(
 
     // Root-level video fallback
     videoSubmissionUrl: { type: String, default: '' },
+    // Individual team override for video submission lock (default: false / locked)
+    isVideoUnlocked: { type: Boolean, default: false },
 
     registrationStatus: {
       type: String,

@@ -34,6 +34,9 @@ const eventSchema = new mongoose.Schema(
     },
     status: { type: String, enum: ['upcoming', 'live', 'closed', 'ended'], default: 'upcoming' },
     categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
+    // Video submission lock controls (default: LOCKED for all events)
+    videoSubmissionsOpen: { type: Boolean, default: false },
+    isVideoUnlocked: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
