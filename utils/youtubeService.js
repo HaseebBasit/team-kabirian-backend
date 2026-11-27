@@ -20,13 +20,46 @@ function getOAuth2Client() {
 
 /**
  * Extracts 11-char YouTube ID from URL or bare ID.
+ * Supports standard watch URLs, youtu.be, shorts, live, embed, and 11-char bare IDs.
  */
 function extractYouTubeId(urlOrId) {
   if (!urlOrId || typeof urlOrId !== 'string') return null;
   const trimmed = urlOrId.trim();
   if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
-  const match = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+  const match = trimmed.match(
+    /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i
+  );
   return match && match[1] ? match[1] : null;
+}
+
+/**
+ * Normalizes any external video URL:
+ * - Converts YouTube links to canonical watch URLs
+ * - Normalizes Google Drive preview/view links
+ * - Guarantees https:// prefix to prevent relative redirect issues
+ */
+function normalizeVideoUrl(url, ytId) {
+  if (ytId) {
+    return `https://www.youtube.com/watch?v=${ytId}`;
+  }
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+
+  const detectedYtId = extractYouTubeId(trimmed);
+  if (detectedYtId) {
+    return `https://www.youtube.com/watch?v=${detectedYtId}`;
+  }
+
+  const driveMatch = trimmed.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/i);
+  if (driveMatch && driveMatch[1]) {
+    return `https://drive.google.com/file/d/${driveMatch[1]}/view`;
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
 }
 
 /**
@@ -69,5 +102,6 @@ async function uploadVideoToYouTube({ filePath, title, description }) {
 module.exports = {
   uploadVideoToYouTube,
   extractYouTubeId,
+  normalizeVideoUrl,
   getOAuth2Client,
 };

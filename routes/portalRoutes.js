@@ -11,7 +11,7 @@ const portalController = require('../controllers/portalController');
 const adminController = require('../controllers/adminController');
 const videoController = require('../controllers/videoController');
 const videoUpload = require('../middlewares/videoUploadMiddleware');
-const { extractYouTubeId } = require('../utils/youtubeService');
+const { extractYouTubeId, normalizeVideoUrl } = require('../utils/youtubeService');
 
 // Middlewares
 const { protect } = require('../middlewares/authMiddleware');
@@ -790,7 +790,7 @@ const saveAthleteVideoHandler = async (req, res) => {
     }
 
     const extractedYtId = extractYouTubeId(videoUrl);
-    const finalVideoUrl = extractedYtId ? `https://www.youtube.com/watch?v=${extractedYtId}` : videoUrl.trim();
+    const finalVideoUrl = extractedYtId ? `https://www.youtube.com/watch?v=${extractedYtId}` : normalizeVideoUrl(videoUrl);
     const finalYoutubeId = extractedYtId || '';
 
     let updated = false;

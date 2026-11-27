@@ -1,6 +1,6 @@
 const fs = require('fs');
 const Registration = require('../models/Registration');
-const { uploadVideoToYouTube, extractYouTubeId } = require('../utils/youtubeService');
+const { uploadVideoToYouTube, extractYouTubeId, normalizeVideoUrl } = require('../utils/youtubeService');
 
 /**
  * Uploads athlete performance video directly to YouTube (Unlisted)
@@ -60,7 +60,7 @@ exports.uploadAthleteVideo = async (req, res) => {
         finalYoutubeId = extractedId;
         finalVideoUrl = `https://www.youtube.com/watch?v=${extractedId}`;
       } else {
-        finalVideoUrl = inputUrl;
+        finalVideoUrl = normalizeVideoUrl(inputUrl);
         finalYoutubeId = '';
       }
     }
